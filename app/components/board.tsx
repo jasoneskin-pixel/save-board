@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Save } from "@/lib/airtable";
+import { isCampaignTag } from "@/lib/campaign-tags";
 import SaveCard from "./save-card";
 import DetailModal from "./detail-modal";
 import BatchEditModal from "./batch-edit-modal";
@@ -36,11 +37,17 @@ export default function Board() {
     loadSaves().finally(() => setRefreshing(false));
   }
 
-  // Every tag in use, sorted, for the filter chips.
-  const allTags = useMemo(() => {
+  // Every tag in use, sorted, for the filter chips — split into content
+  // categories and campaign titles so they display as two visually distinct
+  // groups (filtering itself still treats them identically).
+  const { contentTags, campaignTags } = useMemo(() => {
     const set = new Set<string>();
     for (const s of saves) for (const t of s.tags) set.add(t);
-    return [...set].sort((a, b) => a.localeCompare(b));
+    const sorted = [...set].sort((a, b) => a.localeCompare(b));
+    return {
+      contentTags: sorted.filter((t) => !isCampaignTag(t)),
+      campaignTags: sorted.filter((t) => isCampaignTag(t)),
+    };
   }, [saves]);
 
   // Every author who has saved something, sorted, for the author filter.
@@ -195,10 +202,10 @@ export default function Board() {
           </div>
         )}
 
-        {/* Tag chips */}
-        {allTags.length > 0 && (
+        {/* Content-category tag chips */}
+        {contentTags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
-            {allTags.map((tag) => {
+            {contentTags.map((tag) => {
               const active = selectedTags.includes(tag);
               return (
                 <button
@@ -214,9 +221,46 @@ export default function Board() {
                 </button>
               );
             })}
-            {selectedTags.length > 0 && (
+            {selectedTags.some((t) => contentTags.includes(t)) && (
               <button
-                onClick={() => setSelectedTags([])}
+                onClick={() =>
+                  setSelectedTags((prev) => prev.filter((t) => !contentTags.includes(t)))
+                }
+                className="ml-1 text-xs font-medium text-zinc-400 hover:text-zinc-700"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Campaign tag chips — kept visually separate from content categories. */}
+        {campaignTags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-400">
+              Campaigns
+            </span>
+            {campaignTags.map((tag) => {
+              const active = selectedTags.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                    active
+                      ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white"
+                      : "bg-violet-50 text-violet-800 hover:bg-violet-100"
+                  }`}
+                >
+                  #{tag}
+                </button>
+              );
+            })}
+            {selectedTags.some((t) => campaignTags.includes(t)) && (
+              <button
+                onClick={() =>
+                  setSelectedTags((prev) => prev.filter((t) => !campaignTags.includes(t)))
+                }
                 className="ml-1 text-xs font-medium text-zinc-400 hover:text-zinc-700"
               >
                 Clear

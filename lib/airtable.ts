@@ -210,6 +210,77 @@ export async function deleteSave(id: string): Promise<void> {
   await base()(env.savesTable).destroy([id]);
 }
 
+/** Airtable's bulk record update accepts at most 10 records per call. */
+async function updateTagsInBatches(
+  updates: { id: string; tags: string[] }[],
+): Promise<void> {
+  for (let i = 0; i < updates.length; i += 10) {
+    const chunk = updates.slice(i, i + 10).map((u) => ({
+      id: u.id,
+      fields: { [FIELDS.save.tags]: u.tags },
+    }));
+    if (chunk.length > 0) {
+      await base()(env.savesTable).update(chunk, { typecast: true });
+    }
+  }
+}
+
+/** Every tag currently in use, with how many saves reference it. */
+export async function listTagsWithCounts(): Promise<
+  { name: string; count: number }[]
+> {
+  const records = await base()(env.savesTable).select().all();
+  const counts = new Map<string, number>();
+  for (const r of records) {
+    const tags = (r.get(FIELDS.save.tags) as string[]) ?? [];
+    for (const t of tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Rename a tag across every save that has it. Renaming to a tag name that
+ * already exists merges the two (normalizeTags de-dupes the result), so this
+ * one operation covers both "rename" and "merge into" in the tag-management
+ * UI. Returns how many saves were touched.
+ */
+export async function renameTag(
+  oldName: string,
+  newName: string,
+): Promise<{ updatedCount: number }> {
+  const from = oldName.trim().toLowerCase();
+  const to = newName.trim().toLowerCase();
+  if (!from || !to) throw new Error("Tag names cannot be empty.");
+
+  const records = await base()(env.savesTable).select().all();
+  const updates = records
+    .map((r) => ({ id: r.id, tags: (r.get(FIELDS.save.tags) as string[]) ?? [] }))
+    .filter((r) => r.tags.includes(from))
+    .map((r) => ({
+      id: r.id,
+      tags: normalizeTags(r.tags.map((t) => (t === from ? to : t))),
+    }));
+
+  await updateTagsInBatches(updates);
+  return { updatedCount: updates.length };
+}
+
+/** Remove a tag from every save that has it. Returns how many were touched. */
+export async function deleteTag(name: string): Promise<{ updatedCount: number }> {
+  const target = name.trim().toLowerCase();
+
+  const records = await base()(env.savesTable).select().all();
+  const updates = records
+    .map((r) => ({ id: r.id, tags: (r.get(FIELDS.save.tags) as string[]) ?? [] }))
+    .filter((r) => r.tags.includes(target))
+    .map((r) => ({ id: r.id, tags: r.tags.filter((t) => t !== target) }));
+
+  await updateTagsInBatches(updates);
+  return { updatedCount: updates.length };
+}
+
 /** Fetch a single save by record id. */
 export async function getSave(id: string): Promise<Save> {
   const record = await base()(env.savesTable).find(id);
