@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import type { Save } from "@/lib/airtable";
+import { getTikTokVideoId } from "@/lib/video-embeds";
+import InstagramEmbed from "./instagram-embed";
 import { PLATFORM_STYLES } from "./save-card";
 
 export default function DetailModal({
@@ -119,18 +121,7 @@ export default function DetailModal({
         </div>
 
         <div className="space-y-4 p-5">
-          {save.thumbnailUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={save.thumbnailUrl}
-              alt={save.caption ?? "Saved item"}
-              className="max-h-72 w-full rounded-lg object-contain bg-zinc-50"
-            />
-          ) : (
-            <div className="flex h-40 items-center justify-center rounded-lg bg-zinc-100 text-sm text-zinc-400">
-              No thumbnail yet
-            </div>
-          )}
+          <SaveMedia save={save} />
 
           {save.caption && (
             <p className="text-sm text-zinc-700">{save.caption}</p>
@@ -142,7 +133,7 @@ export default function DetailModal({
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-orange-500 to-pink-600 px-3 py-1.5 text-sm font-medium text-white hover:from-orange-600 hover:to-pink-700"
           >
-            Open link ↗
+            Open on {save.platform ?? "site"} ↗
           </a>
 
           <div className="text-xs text-zinc-500">
@@ -241,6 +232,44 @@ export default function DetailModal({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Plays the save inline when the platform supports it, falling back to the thumbnail. */
+function SaveMedia({ save }: { save: Save }) {
+  if (save.platform === "TikTok") {
+    const videoId = getTikTokVideoId(save.url);
+    if (videoId) {
+      return (
+        <iframe
+          src={`https://www.tiktok.com/player/v1/${videoId}?music_info=1&description=1`}
+          allow="encrypted-media;"
+          className="mx-auto aspect-[9/16] w-full max-w-72 rounded-lg border-0"
+          loading="lazy"
+        />
+      );
+    }
+  }
+
+  if (save.platform === "Instagram") {
+    return <InstagramEmbed url={save.url} />;
+  }
+
+  if (save.thumbnailUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={save.thumbnailUrl}
+        alt={save.caption ?? "Saved item"}
+        className="max-h-72 w-full rounded-lg object-contain bg-zinc-50"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-40 items-center justify-center rounded-lg bg-zinc-100 text-sm text-zinc-400">
+      No thumbnail yet
     </div>
   );
 }
