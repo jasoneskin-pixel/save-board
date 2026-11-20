@@ -144,6 +144,40 @@ async function fetchInstagram(url: string): Promise<{
     : result;
 }
 
+// TikTok's oEmbed endpoint stopped returning title/author_name/thumbnail_url
+// at some point (confirmed empirically — it now returns only the embed
+// iframe fields), breaking auto-thumbnails for every new TikTok save. The
+// watch page's static HTML has no usable Open Graph tags either (TikTok
+// needs JS to render them), so this falls back to the page's own embedded
+// state JSON, which still carries the real cover image and caption.
+const REHYDRATION_SCRIPT_RE =
+  /<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/;
+
+async function fetchTikTokPage(url: string): Promise<{
+  caption: string | null;
+  thumbnailUrl: string | null;
+}> {
+  try {
+    const res = await fetchWithTimeout(url);
+    if (!res.ok) return { caption: null, thumbnailUrl: null };
+    const html = await res.text();
+    const match = html.match(REHYDRATION_SCRIPT_RE);
+    if (!match) return { caption: null, thumbnailUrl: null };
+    const data = JSON.parse(match[1]);
+    const videoDetail = data?.__DEFAULT_SCOPE__?.["webapp.video-detail"];
+    const item = videoDetail?.itemInfo?.itemStruct;
+    if (!item || videoDetail.statusCode) {
+      return { caption: null, thumbnailUrl: null };
+    }
+    const caption = (item.desc as string)?.trim() || null;
+    const thumbnailUrl =
+      (item.video?.cover as string) || (item.video?.originCover as string) || null;
+    return { caption, thumbnailUrl };
+  } catch {
+    return { caption: null, thumbnailUrl: null };
+  }
+}
+
 async function fetchTikTok(url: string): Promise<{
   caption: string | null;
   thumbnailUrl: string | null;
@@ -152,20 +186,24 @@ async function fetchTikTok(url: string): Promise<{
     const res = await fetchWithTimeout(
       `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
     );
-    if (!res.ok) return { caption: null, thumbnailUrl: null };
-    const data = (await res.json()) as {
-      title?: string;
-      author_name?: string;
-      thumbnail_url?: string;
-    };
-    const caption =
-      data.title?.trim() ||
-      (data.author_name ? `TikTok by ${data.author_name}` : null) ||
-      null;
-    return { caption, thumbnailUrl: data.thumbnail_url ?? null };
+    if (res.ok) {
+      const data = (await res.json()) as {
+        title?: string;
+        author_name?: string;
+        thumbnail_url?: string;
+      };
+      const caption =
+        data.title?.trim() ||
+        (data.author_name ? `TikTok by ${data.author_name}` : null) ||
+        null;
+      if (caption || data.thumbnail_url) {
+        return { caption, thumbnailUrl: data.thumbnail_url ?? null };
+      }
+    }
   } catch {
-    return { caption: null, thumbnailUrl: null };
+    // fall through to the page scrape below
   }
+  return fetchTikTokPage(url);
 }
 
 /**
@@ -177,10 +215,7 @@ export async function fetchMetadata(url: string): Promise<LinkMetadata> {
 
   if (platform === "TikTok") {
     const { caption, thumbnailUrl } = await fetchTikTok(url);
-    // Fall back to OG scrape if oEmbed returned nothing useful.
-    if (caption || thumbnailUrl) return { platform, caption, thumbnailUrl };
-    const og = await fetchOpenGraph(url);
-    return { platform, ...og };
+    return { platform, caption, thumbnailUrl };
   }
 
   if (platform === "Instagram") {
