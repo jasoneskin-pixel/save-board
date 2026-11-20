@@ -236,24 +236,64 @@ export default function DetailModal({
   );
 }
 
-/** Plays the save inline when the platform supports it, falling back to the thumbnail. */
+/**
+ * Plays the save inline when the platform supports it, falling back to the
+ * thumbnail. The embed only mounts after a tap, rather than eagerly on open:
+ * the real thumbnail is a plain <img> that's guaranteed to render, while the
+ * third-party TikTok/Instagram embeds are heavier and can end up blank on
+ * some mobile browsers (e.g. third-party-storage/autoplay restrictions) —
+ * tap-to-play means there's always something visible either way, and it
+ * satisfies the "needs a user gesture" rule those embeds rely on for audio.
+ */
 function SaveMedia({ save }: { save: Save }) {
-  if (save.platform === "TikTok") {
-    const videoId = getTikTokVideoId(save.url);
-    if (videoId) {
+  const [playing, setPlaying] = useState(false);
+  const tikTokVideoId =
+    save.platform === "TikTok" ? getTikTokVideoId(save.url) : null;
+  const playableInline =
+    (save.platform === "TikTok" && !!tikTokVideoId) ||
+    save.platform === "Instagram";
+
+  if (playableInline && playing) {
+    if (tikTokVideoId) {
       return (
         <iframe
-          src={`https://www.tiktok.com/player/v1/${videoId}?music_info=1&description=1`}
-          allow="encrypted-media;"
+          src={`https://www.tiktok.com/player/v1/${tikTokVideoId}?embed_from=oembed&music_info=1&description=1&autoplay=1`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
           className="mx-auto aspect-[9/16] w-full max-w-72 rounded-lg border-0"
           loading="lazy"
         />
       );
     }
+    return <InstagramEmbed url={save.url} />;
   }
 
-  if (save.platform === "Instagram") {
-    return <InstagramEmbed url={save.url} />;
+  if (playableInline) {
+    return (
+      <button
+        onClick={() => setPlaying(true)}
+        aria-label="Play video"
+        className="relative mx-auto block w-full max-w-72"
+      >
+        {save.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={save.thumbnailUrl}
+            alt={save.caption ?? "Saved item"}
+            className="aspect-[9/16] w-full rounded-lg bg-zinc-50 object-contain"
+          />
+        ) : (
+          <div className="flex aspect-[9/16] items-center justify-center rounded-lg bg-zinc-100 text-sm text-zinc-400">
+            No thumbnail yet
+          </div>
+        )}
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/60 text-2xl text-white">
+            ▶
+          </span>
+        </span>
+      </button>
+    );
   }
 
   if (save.thumbnailUrl) {

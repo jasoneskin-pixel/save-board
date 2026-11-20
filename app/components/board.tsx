@@ -336,6 +336,7 @@ export default function Board() {
 
       {selected && (
         <DetailModal
+          key={selected.id}
           save={selected}
           onClose={() => setSelected(null)}
           onUpdated={onUpdated}
