@@ -1,9 +1,10 @@
 /**
  * Helpers for playing saved videos inline instead of bouncing out to the
- * TikTok/Instagram app. Both platforms only support inline playback via
- * their own officially embeddable players (there's no API for fetching a
- * raw video file, and scraping one would violate their terms) — so this
- * extracts just enough from the stored URL to build each platform's embed.
+ * TikTok app. TikTok only supports inline playback via its own officially
+ * embeddable player (there's no API for fetching a raw video file, and
+ * scraping one would violate their terms) — so this extracts just enough
+ * from the stored URL to build that embed. Instagram has no equivalent: its
+ * public embed widget has no real inline video, just a link out to the app.
  */
 
 /**

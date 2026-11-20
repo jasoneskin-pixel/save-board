@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import type { Save } from "@/lib/airtable";
 import { getTikTokVideoId } from "@/lib/video-embeds";
-import InstagramEmbed from "./instagram-embed";
 import { PLATFORM_STYLES } from "./save-card";
 
 export default function DetailModal({
@@ -239,33 +238,35 @@ export default function DetailModal({
 /**
  * Plays the save inline when the platform supports it, falling back to the
  * thumbnail. The embed only mounts after a tap, rather than eagerly on open:
- * the real thumbnail is a plain <img> that's guaranteed to render, while the
- * third-party TikTok/Instagram embeds are heavier and can end up blank on
- * some mobile browsers (e.g. third-party-storage/autoplay restrictions) —
- * tap-to-play means there's always something visible either way, and it
- * satisfies the "needs a user gesture" rule those embeds rely on for audio.
+ * the real thumbnail is a plain <img> that's guaranteed to render, while
+ * TikTok's embed is heavier and can end up blank on some mobile browsers
+ * (e.g. third-party-storage/autoplay restrictions) — tap-to-play means
+ * there's always something visible either way, and it satisfies the "needs
+ * a user gesture" rule the embed relies on for audio.
+ *
+ * Instagram has no inline option: its public embed widget has no real
+ * <video> element (confirmed by inspecting its rendered markup) — the "play"
+ * area is just a link that opens the post on instagram.com. Meta restricts
+ * true inline playback to apps using their Graph API with a connected
+ * Instagram Business account, so Instagram saves just show the thumbnail
+ * and the "Open on Instagram" link below.
  */
 function SaveMedia({ save }: { save: Save }) {
   const [playing, setPlaying] = useState(false);
   const tikTokVideoId =
     save.platform === "TikTok" ? getTikTokVideoId(save.url) : null;
-  const playableInline =
-    (save.platform === "TikTok" && !!tikTokVideoId) ||
-    save.platform === "Instagram";
+  const playableInline = save.platform === "TikTok" && !!tikTokVideoId;
 
   if (playableInline && playing) {
-    if (tikTokVideoId) {
-      return (
-        <iframe
-          src={`https://www.tiktok.com/player/v1/${tikTokVideoId}?embed_from=oembed&music_info=1&description=1&autoplay=1`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          className="mx-auto aspect-[9/16] w-full max-w-72 rounded-lg border-0"
-          loading="lazy"
-        />
-      );
-    }
-    return <InstagramEmbed url={save.url} />;
+    return (
+      <iframe
+        src={`https://www.tiktok.com/player/v1/${tikTokVideoId}?embed_from=oembed&music_info=1&description=1&autoplay=1`}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        className="mx-auto aspect-[9/16] w-full max-w-72 rounded-lg border-0"
+        loading="lazy"
+      />
+    );
   }
 
   if (playableInline) {
